@@ -105,6 +105,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Nerdbank.GitVersioning
+        run: dotnet tool install --global nbgv
+
       - name: Determine version
         id: version
         run: |
@@ -114,11 +117,13 @@ jobs:
             IMAGE_TAG="$VERSION"
             echo "📦 Building RELEASE version: $VERSION"
           else
-            # Development build: use short SHA
+            # Development build: use valid SemVer with prerelease tag
             SHORT_SHA=$(git rev-parse --short HEAD)
-            VERSION="dev-${SHORT_SHA}"
+            # Get version from nbgv, but use valid SemVer format: 1.0.1-dev.abc123
+            BASE_VERSION=$(nbgv get-version -v Version | cut -d'.' -f1-3)
+            VERSION="${BASE_VERSION}-dev.${SHORT_SHA}"
             IMAGE_TAG="dev-${SHORT_SHA}"
-            echo "📦 Building DEV version: $VERSION"
+            echo "📦 Building DEV version: $VERSION (image tag: $IMAGE_TAG)"
           fi
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
