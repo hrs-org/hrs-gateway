@@ -93,7 +93,7 @@ jobs:
 
       - name: Prepare deployment manifest
         run: |
-          echo "📝 Preparing deployment manifest with secrets..."
+          echo "Preparing deployment manifest with secrets..."
 
           # Replace placeholders in the deployment file
           sed "s|__ACR_NAME__|${{ secrets.ACR_NAME }}|g" k8s/deployment-uat.yaml | \
