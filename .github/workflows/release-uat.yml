@@ -1,0 +1,243 @@
+name: Release UAT to AKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., 1.0.0, dev-abc123, or "latest")'
+        required: true
+        default: "latest"
+        type: string
+      environment:
+        description: "Target environment"
+        required: true
+        default: "uat"
+        type: choice
+        options:
+          - uat
+          - staging
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+env:
+  AZURE_RESOURCE_GROUP: rg-hrsm-uat
+  AKS_CLUSTER_NAME: hrsm-uat-aks
+  NAMESPACE: hrs-uat
+  DEPLOYMENT_NAME: hrs-gateway-uat
+  SERVICE_NAME: hrs-gateway-uat-svc
+
+jobs:
+  deploy-to-aks:
+    name: Deploy to AKS ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Azure CLI
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "latest"
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --overwrite-existing
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Attach ACR to AKS (if not already attached)
+        run: |
+          az aks update \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --attach-acr ${{ secrets.ACR_NAME }} || echo "ACR already attached or unable to attach"
+
+      - name: Verify image exists in ACR
+        run: |
+          echo "🔍 Verifying image exists in ACR..."
+
+          # List all available tags
+          echo "Available tags:"
+          az acr repository show-tags \
+            --name ${{ secrets.ACR_NAME }} \
+            --repository hrs-gateway-uat \
+            --orderby time_desc \
+            --output table
+
+          # Check if specific tag exists
+          if az acr repository show-tags \
+              --name ${{ secrets.ACR_NAME }} \
+              --repository hrs-gateway-uat \
+              --output tsv | grep -q "^${{ github.event.inputs.version }}$"; then
+            echo "✅ Image tag '${{ github.event.inputs.version }}' found in ACR"
+          else
+            echo "❌ Image tag '${{ github.event.inputs.version }}' not found in ACR"
+            echo ""
+            echo "Please use one of the available tags listed above or build the image first."
+            exit 1
+          fi
+
+      - name: Prepare deployment manifest
+        run: |
+          echo "📝 Preparing deployment manifest with secrets..."
+
+          # Replace placeholders in the deployment file
+          sed "s|__ACR_NAME__|${{ secrets.ACR_NAME }}|g" k8s/deployment-uat.yaml | \
+          sed "s|__IMAGE_TAG__|${{ github.event.inputs.version }}|g" | \
+          sed "s|__JWT_KEY__|${{ secrets.JWT_KEY }}|g" | \
+          sed "s|__JWT_ISSUER__|${{ secrets.JWT_ISSUER || 'https://auth.hrs.com' }}|g" | \
+          sed "s|__CORS_ORIGIN_0__|${{ secrets.CORS_ORIGIN_LOCALHOST || 'http://localhost:4200' }}|g" | \
+          sed "s|__CORS_ORIGIN_1__|${{ secrets.CORS_ORIGIN_UAT || 'https://hrs-frontend-uat.azurewebsites.net' }}|g" \
+          > k8s/deployment-final.yaml
+
+          # Show the final manifest for debugging (mask sensitive values)
+          echo "=== Final Deployment Manifest (sensitive values masked) ==="
+          cat k8s/deployment-final.yaml | grep -v -E "(JWT_KEY|CORS_ORIGIN)" || cat k8s/deployment-final.yaml
+
+      - name: Deploy to AKS
+        run: |
+          echo "🚀 Deploying to AKS..."
+          kubectl apply -f k8s/deployment-final.yaml
+
+          # Annotate deployment with metadata
+          kubectl annotate deployment/${{ env.DEPLOYMENT_NAME }} \
+            -n ${{ env.NAMESPACE }} \
+            deployment.kubernetes.io/version="${{ github.event.inputs.version }}" \
+            deployment.kubernetes.io/deployed-by="${{ github.actor }}" \
+            deployment.kubernetes.io/deployed-at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --overwrite
+
+      - name: Wait for deployment rollout
+        run: |
+          echo "⏳ Waiting for deployment to complete..."
+          kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} \
+            --namespace=${{ env.NAMESPACE }} \
+            --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          echo "✅ Deployment completed. Verifying status..."
+          echo ""
+
+          echo "📦 Deployment status:"
+          kubectl get deployment ${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }} -o wide
+          echo ""
+
+          echo "🔄 Pod status:"
+          kubectl get pods -l app=hrs-gateway -n ${{ env.NAMESPACE }} -o wide
+          echo ""
+
+          echo "🌐 Service status:"
+          kubectl get service ${{ env.SERVICE_NAME }} -n ${{ env.NAMESPACE }}
+          echo ""
+
+          echo "🔗 Ingress status:"
+          kubectl get ingress hrs-gateway-ingress -n ${{ env.NAMESPACE }} || echo "No ingress configured"
+          echo ""
+
+          echo "📜 Deployment history:"
+          kubectl rollout history deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }}
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests..."
+
+          # Get the service endpoint
+          SERVICE_IP=$(kubectl get service ${{ env.SERVICE_NAME }} -n ${{ env.NAMESPACE }} -o jsonpath='{.spec.clusterIP}')
+          echo "Service IP: $SERVICE_IP"
+
+          # Port forward for testing (runs in background)
+          kubectl port-forward service/${{ env.SERVICE_NAME }} 8080:80 -n ${{ env.NAMESPACE }} &
+          PORT_FORWARD_PID=$!
+
+          # Wait for port forward to be ready
+          echo "Waiting for port forward to be ready..."
+          sleep 10
+
+          # Test health endpoint
+          echo "Testing health endpoint..."
+          if curl -f -s http://localhost:8080/health; then
+            echo ""
+            echo "✅ Health check passed"
+            HEALTH_STATUS="success"
+          else
+            echo ""
+            echo "❌ Health check failed"
+            HEALTH_STATUS="failed"
+          fi
+
+          # Clean up port forward
+          kill $PORT_FORWARD_PID || true
+
+          # Exit with error if health check failed
+          if [ "$HEALTH_STATUS" = "failed" ]; then
+            exit 1
+          fi
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ github.event.inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ github.event.inputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Namespace** | \`${{ env.NAMESPACE }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Cluster** | \`${{ env.AKS_CLUSTER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployed at** | $(date -u +'%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "### ✅ Status: Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Status: Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  rollback:
+    name: Rollback if needed
+    runs-on: ubuntu-latest
+    needs: deploy-to-aks
+    if: failure()
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Set up Azure CLI
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "latest"
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --overwrite-existing
+
+      - name: Rollback deployment
+        run: |
+          echo "Rolling back deployment..."
+          kubectl rollout undo deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }} --timeout=300s
+
+          echo "Rollback completed. Current deployment status:"
+          kubectl get deployment ${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }}
