@@ -1,47 +1,112 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
+using HRS.Gateway.Configuration;
 using HRS.Gateway.Extensions;
-using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddJsonFile("yarp.json", optional: false, reloadOnChange: true);
+var corsSettings = builder.Configuration
+    .GetSection(CorsSettings.SectionName)
+    .Get<CorsSettings>() ?? new CorsSettings();
 
-var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new Exception("JWT key missing");
-var jwtIssuer = builder.Configuration["Jwt:Issuer"];
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = false,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-        };
-    });
-builder.Services.AddJwtAuthentication(builder.Configuration);
-builder.Services.AddAuthorization();
-builder.Services.AddLogging();
-builder.Services.AddRateLimiter(_ => _.AddFixedWindowLimiter("default", options =>
+if (corsSettings.AllowedOrigins.Length == 0)
 {
-    options.PermitLimit = 100;
-    options.Window = TimeSpan.FromMinutes(1);
-    options.QueueLimit = 5;
-}));
+    throw new InvalidOperationException("CORS AllowedOrigins must be configured in appsettings.json");
+}
+
+builder.Logging.AddConsole();
+var logger = builder.Services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
+logger.LogInformation("CORS Policy: {PolicyName}", corsSettings.PolicyName);
+logger.LogInformation("Allowed Origins: {Origins}", string.Join(", ", corsSettings.AllowedOrigins));
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddJwtAuthentication(builder.Configuration);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(corsSettings.PolicyName, policy =>
+    {
+        if (corsSettings.AllowedOrigins.Contains("*"))
+        {
+            policy.AllowAnyOrigin();
+        }
+        else
+        {
+            policy.WithOrigins(corsSettings.AllowedOrigins)
+                  .SetIsOriginAllowedToAllowWildcardSubdomains();
+        }
+
+        if (corsSettings.AllowedMethods.Contains("*"))
+        {
+            policy.AllowAnyMethod();
+        }
+        else
+        {
+            policy.WithMethods(corsSettings.AllowedMethods);
+        }
+
+        if (corsSettings.AllowedHeaders.Contains("*"))
+        {
+            policy.AllowAnyHeader();
+        }
+        else
+        {
+            policy.WithHeaders(corsSettings.AllowedHeaders);
+        }
+
+        if (corsSettings.AllowCredentials)
+        {
+            policy.AllowCredentials();
+        }
+
+        policy.SetPreflightMaxAge(TimeSpan.FromSeconds(corsSettings.MaxAge));
+
+        policy.WithExposedHeaders("Content-Disposition", "X-Total-Count");
+    });
+});
+
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+
+    app.Logger.LogInformation("CORS enabled for development with origins: {Origins}",
+        string.Join(", ", corsSettings.AllowedOrigins));
+}
+
+app.UseCors(corsSettings.PolicyName);
+
 app.UseHttpsRedirection();
+app.UseRouting();
+
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
 
-app.MapGet("/health", () => Results.Ok(new { status = "Gateway OK", time = DateTime.UtcNow }));
-app.MapReverseProxy();
+app.MapControllers();
+
+app.MapHealthChecks("/health");
+app.MapGet("/health/ready", () => Results.Ok(new
+{
+    status = "ready",
+    timestamp = DateTime.UtcNow,
+    environment = app.Environment.EnvironmentName,
+    corsPolicy = corsSettings.PolicyName,
+    allowedOrigins = corsSettings.AllowedOrigins
+}));
+
+app.MapGet("/health/live", () => Results.Ok(new
+{
+    status = "live",
+    timestamp = DateTime.UtcNow
+}));
+
+app.Logger.LogInformation("HRS Gateway started");
+app.Logger.LogInformation("Environment: {Environment}", app.Environment.EnvironmentName);
+app.Logger.LogInformation("CORS Policy: {PolicyName}", corsSettings.PolicyName);
 
 app.Run();

@@ -1,13 +1,26 @@
-# Stage 1: build
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
-COPY . .
-RUN dotnet restore
-RUN dotnet publish -c Release -o out
-
-# Stage 2: runtime
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
-WORKDIR /app
-COPY --from=build /app/out .
 EXPOSE 8080
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG BUILD_CONFIGURATION=Release
+ARG VERSION=1.0.0
+WORKDIR /src
+
+COPY ["HRS.Gateway.csproj", "./"]
+RUN dotnet restore "HRS.Gateway.csproj"
+
+COPY . .
+RUN dotnet build "HRS.Gateway.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:Version=$VERSION
+
+FROM build AS publish
+RUN dotnet publish "HRS.Gateway.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+
+ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_URLS=http://+:8080
+
 ENTRYPOINT ["dotnet", "HRS.Gateway.dll"]

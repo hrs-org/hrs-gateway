@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hrs-gateway-config
+  namespace: hrs-uat
+data:
+  appsettings.Production.json: |
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning"
+        }
+      },
+      "Cors": {
+        "PolicyName": "HRSCorsPolicy",
+        "AllowedOrigins": [
+          "http://localhost:4200",
+          "https://hrs-frontend-uat.azurewebsites.net"
+        ],
+        "AllowedMethods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        "AllowedHeaders": ["*"],
+        "AllowCredentials": true,
+        "MaxAge": 3600
+      }
+    }

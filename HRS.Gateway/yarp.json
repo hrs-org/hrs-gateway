@@ -6,11 +6,6 @@
         "Match": { "Path": "/api/users/{**catch-all}" },
         "Transforms": [{ "PathRemovePrefix": "/api/users" }]
       },
-      "store": {
-        "ClusterId": "store-cluster",
-        "Match": { "Path": "/api/store/{**catch-all}" },
-        "Transforms": [{ "PathRemovePrefix": "/api/store" }]
-      },
       "orders": {
         "ClusterId": "orders-cluster",
         "Match": { "Path": "/api/orders/{**catch-all}" },
@@ -22,13 +17,6 @@
         "Destinations": {
           "user-api": {
             "Address": "http://hrs-user-service.user.svc.cluster.local/"
-          }
-        }
-      },
-      "store-cluster": {
-        "Destinations": {
-          "store-api": {
-            "Address": "http://hrs-store-service.store.svc.cluster.local/"
           }
         }
       },

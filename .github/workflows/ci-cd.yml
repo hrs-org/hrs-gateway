@@ -1,0 +1,243 @@
+name: HRS Gateway CI/CD
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop]
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+  pull-requests: write
+  checks: write
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore HRS.Gateway/HRS.Gateway.csproj
+
+      - name: Build project
+        run: dotnet build HRS.Gateway/HRS.Gateway.csproj --configuration Release --no-restore
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore HRS.Gateway/HRS.Gateway.csproj
+
+      - name: Check code formatting
+        run: dotnet format HRS.Gateway/HRS.Gateway.csproj --verify-no-changes --verbosity diagnostic
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore HRS.Gateway/HRS.Gateway.csproj
+
+      - name: Security audit
+        run: dotnet list HRS.Gateway/HRS.Gateway.csproj package --vulnerable --include-transitive > security-audit.txt 2>&1 || true
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: security-audit.txt
+          retention-days: 7
+
+  docker-build:
+    name: Build & Push Docker Image to ACR
+    runs-on: ubuntu-latest
+    needs: [build, lint, security-scan]
+    if: github.event_name == 'push'
+    environment: uat
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image_tag: ${{ steps.version.outputs.image_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tagged release: v1.2.3 → 1.2.3
+            VERSION=${GITHUB_REF#refs/tags/v}
+            IMAGE_TAG="$VERSION"
+            echo "📦 Building RELEASE version: $VERSION"
+          else
+            # Development build: use short SHA
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            VERSION="dev-${SHORT_SHA}"
+            IMAGE_TAG="dev-${SHORT_SHA}"
+            echo "📦 Building DEV version: $VERSION"
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./HRS.Gateway
+          file: ./HRS.Gateway/DockerFile
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${{ steps.version.outputs.image_tag }}
+            ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:latest
+            ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Create deployment info
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/deployment-info.txt <<EOF
+          VERSION=${{ steps.version.outputs.version }}
+          IMAGE_TAG=${{ steps.version.outputs.image_tag }}
+          COMMIT_SHA=${{ github.sha }}
+          BRANCH=${{ github.ref_name }}
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          TRIGGERED_BY=${{ github.actor }}
+          EOF
+
+          echo "📄 Deployment Info:"
+          cat artifacts/deployment-info.txt
+
+      - name: Upload deployment info
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-info
+          path: artifacts/deployment-info.txt
+          retention-days: 30
+
+  dast:
+    name: DAST Security Scan
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.event_name == 'push'
+    environment: uat
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Pull and run Docker image
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+          IMAGE_TAG="${{ needs.docker-build.outputs.image_tag }}"
+
+          echo "Pulling image: ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
+          docker pull ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}
+
+          echo "Starting container..."
+          docker run -d -p 5000:8080 --name hrs-gateway \
+            ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}
+
+          echo "Waiting for application to start..."
+          sleep 20
+
+          echo "Container status:"
+          docker ps -a
+
+          echo "Container logs:"
+          docker logs hrs-gateway
+
+          echo "Testing health endpoint:"
+          curl -f http://localhost:5000/health || echo "Health endpoint not available"
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: "http://localhost:5000/health"
+          cmd_options: "-a -j -l WARN -T 10 -I"
+        continue-on-error: true
+
+      - name: Upload DAST scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dast-scan-results
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
+            report_xml.xml
+          retention-days: 7
+
+      - name: Stop application
+        if: always()
+        run: |
+          docker stop hrs-gateway || true
+          docker rm hrs-gateway || true
