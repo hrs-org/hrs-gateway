@@ -1,13 +1,4 @@
 {
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning",
-      "Yarp": "Information"
-    }
-  },
-  "AllowedHosts": "*",
-
   "ReverseProxy": {
     "Routes": {
       "user-service-route": {
@@ -17,7 +8,7 @@
         },
         "Transforms": [
           {
-            "PathPattern": "/api/{**catch-all}"
+            "PathPattern": "/{**catch-all}"
           }
         ]
       },
@@ -28,7 +19,7 @@
         },
         "Transforms": [
           {
-            "PathPattern": "/api/{**catch-all}"
+            "PathPattern": "/{**catch-all}"
           }
         ]
       }
