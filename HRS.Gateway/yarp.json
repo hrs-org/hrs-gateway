@@ -1,29 +1,68 @@
 {
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Yarp": "Information"
+    }
+  },
+  "AllowedHosts": "*",
+
   "ReverseProxy": {
     "Routes": {
-      "users": {
-        "ClusterId": "user-cluster",
-        "Match": { "Path": "/api/users/{**catch-all}" },
-        "Transforms": [{ "PathRemovePrefix": "/api/users" }]
+      "user-service-route": {
+        "ClusterId": "user-service-cluster",
+        "Match": {
+          "Path": "/api/users/{**catch-all}"
+        },
+        "Transforms": [
+          {
+            "PathPattern": "/api/{**catch-all}"
+          }
+        ]
       },
-      "orders": {
-        "ClusterId": "orders-cluster",
-        "Match": { "Path": "/api/orders/{**catch-all}" },
-        "Transforms": [{ "PathRemovePrefix": "/api/orders" }]
+      "email-service-route": {
+        "ClusterId": "email-service-cluster",
+        "Match": {
+          "Path": "/api/email/{**catch-all}"
+        },
+        "Transforms": [
+          {
+            "PathPattern": "/api/{**catch-all}"
+          }
+        ]
       }
     },
     "Clusters": {
-      "user-cluster": {
+      "user-service-cluster": {
         "Destinations": {
-          "user-api": {
-            "Address": "http://hrs-user-service.user.svc.cluster.local/"
+          "primary": {
+            "Address": "http://hrs-user-service.users.svc.cluster.local"
+          }
+        },
+        "HealthCheck": {
+          "Active": {
+            "Enabled": true,
+            "Interval": "00:00:30",
+            "Timeout": "00:00:10",
+            "Policy": "ConsecutiveFailures",
+            "Path": "/health"
           }
         }
       },
-      "orders-cluster": {
+      "email-service-cluster": {
         "Destinations": {
-          "orders-api": {
-            "Address": "http://hrs-orders-service.orders.svc.cluster.local/"
+          "primary": {
+            "Address": "http://hrs-email-service.email.svc.cluster.local"
+          }
+        },
+        "HealthCheck": {
+          "Active": {
+            "Enabled": true,
+            "Interval": "00:00:30",
+            "Timeout": "00:00:10",
+            "Policy": "ConsecutiveFailures",
+            "Path": "/health"
           }
         }
       }
