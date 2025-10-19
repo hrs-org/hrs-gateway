@@ -19,4 +19,11 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- Update the existing Content item instead of adding a new one -->
+  <ItemGroup>
+    <Content Update="yarp.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -3,6 +3,8 @@ using HRS.Gateway.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration.AddJsonFile("yarp.json", optional: false, reloadOnChange: true);
+
 var corsSettings = builder.Configuration
     .GetSection(CorsSettings.SectionName)
     .Get<CorsSettings>() ?? new CorsSettings();
@@ -68,6 +70,10 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddHealthChecks();
 
+builder.Services
+    .AddReverseProxy()
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -104,6 +110,8 @@ app.MapGet("/health/live", () => Results.Ok(new
     status = "live",
     timestamp = DateTime.UtcNow
 }));
+
+app.MapReverseProxy();
 
 app.Logger.LogInformation("HRS Gateway started");
 app.Logger.LogInformation("Environment: {Environment}", app.Environment.EnvironmentName);
