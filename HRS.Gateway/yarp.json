@@ -25,6 +25,18 @@
         ],
         "Order": 2
       },
+      "maintenance-health-route": {
+        "ClusterId": "maintenance-service-cluster",
+        "Match": {
+          "Path": "/health/maintenance"
+        },
+        "Transforms": [
+          {
+            "PathPattern": "/health"
+          }
+        ],
+        "Order": 3
+      },
       "auth-service-route": {
         "ClusterId": "user-service-cluster",
         "Match": {
@@ -48,6 +60,12 @@
         "Match": {
           "Path": "/api/email/{**catch-all}"
         }
+      },
+      "maintenance-service-route": {
+        "ClusterId": "maintenance-service-cluster",
+        "Match": {
+          "Path": "/api/maintenance/{**catch-all}"
+        }
       }
     },
     "Clusters": {
@@ -62,6 +80,13 @@
         "Destinations": {
           "primary": {
             "Address": "http://hrs-email-service.email.svc.cluster.local"
+          }
+        }
+      },
+      "maintenance-service-cluster": {
+        "Destinations": {
+          "primary": {
+            "Address": "http://hrs-maintenance-service.maintenance.svc.cluster.local"
           }
         }
       }
