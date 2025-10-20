@@ -37,6 +37,18 @@
         ],
         "Order": 3
       },
+      "payment-health-route": {
+        "ClusterId": "payment-service-cluster",
+        "Match": {
+          "Path": "/health/payment"
+        },
+        "Transforms": [
+          {
+            "PathPattern": "/health"
+          }
+        ],
+        "Order": 4
+      },
       "auth-service-route": {
         "ClusterId": "user-service-cluster",
         "Match": {
@@ -66,6 +78,12 @@
         "Match": {
           "Path": "/api/maintenance/{**catch-all}"
         }
+      },
+      "payment-service-route": {
+        "ClusterId": "payment-service-cluster",
+        "Match": {
+          "Path": "/api/payment/{**catch-all}"
+        }
       }
     },
     "Clusters": {
@@ -87,6 +105,13 @@
         "Destinations": {
           "primary": {
             "Address": "http://hrs-maintenance-service.maintenance.svc.cluster.local"
+          }
+        }
+      },
+      "payment-service-cluster": {
+        "Destinations": {
+          "primary": {
+            "Address": "http://hrs-payment-service.payments.svc.cluster.local"
           }
         }
       }
