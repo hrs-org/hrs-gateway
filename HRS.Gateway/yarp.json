@@ -49,6 +49,30 @@
         ],
         "Order": 4
       },
+      "inventory-health-route": {
+        "ClusterId": "inventory-service-cluster",
+        "Match": {
+          "Path": "/health/inventory"
+        },
+        "Transforms": [
+          {
+            "PathPattern": "/health"
+          }
+        ],
+        "Order": 5
+      },
+      "order-health-route": {
+        "ClusterId": "order-service-cluster",
+        "Match": {
+          "Path": "/health/order"
+        },
+        "Transforms": [
+          {
+            "PathPattern": "/health"
+          }
+        ],
+        "Order": 6
+      },
       "auth-service-route": {
         "ClusterId": "user-service-cluster",
         "Match": {
@@ -84,6 +108,18 @@
         "Match": {
           "Path": "/api/payment/{**catch-all}"
         }
+      },
+      "inventory-service-route": {
+        "ClusterId": "inventory-service-cluster",
+        "Match": {
+          "Path": "/api/inventory/{**catch-all}"
+        }
+      },
+      "order-service-route": {
+        "ClusterId": "order-service-cluster",
+        "Match": {
+          "Path": "/api/order/{**catch-all}"
+        }
       }
     },
     "Clusters": {
@@ -112,6 +148,20 @@
         "Destinations": {
           "primary": {
             "Address": "http://hrs-payment-service.payments.svc.cluster.local"
+          }
+        }
+      },
+      "inventory-service-cluster": {
+        "Destinations": {
+          "primary": {
+            "Address": "http://hrs-inventory-service.inventory.svc.cluster.local"
+          }
+        }
+      },
+      "order-service-cluster": {
+        "Destinations": {
+          "primary": {
+            "Address": "http://hrs-order-service.orders.svc.cluster.local"
           }
         }
       }
