@@ -109,16 +109,28 @@
           "Path": "/api/payment/{**catch-all}"
         }
       },
-      "inventory-service-route": {
+      "item-service-route": {
         "ClusterId": "inventory-service-cluster",
         "Match": {
-          "Path": "/api/inventory/{**catch-all}"
+          "Path": "/api/items/{**catch-all}"
+        }
+      },
+      "package-service-route": {
+        "ClusterId": "inventory-service-cluster",
+        "Match": {
+          "Path": "/api/packages/{**catch-all}"
+        }
+      },
+      "catalog-service-route": {
+        "ClusterId": "order-service-cluster",
+        "Match": {
+          "Path": "/api/catalogs/{**catch-all}"
         }
       },
       "order-service-route": {
         "ClusterId": "order-service-cluster",
         "Match": {
-          "Path": "/api/order/{**catch-all}"
+          "Path": "/api/orders/{**catch-all}"
         }
       }
     },
