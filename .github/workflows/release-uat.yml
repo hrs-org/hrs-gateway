@@ -128,6 +128,18 @@ jobs:
             --namespace=${{ env.NAMESPACE }} \
             --timeout=300s
 
+            - name: Force restart deployment
+              run: |
+                  echo "🔄 Forcing deployment restart for clean startup..."
+                  kubectl rollout restart deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }}
+
+            - name: Wait for restart to complete
+              run: |
+                  echo "⏳ Waiting for restart to complete..."
+                  kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} \
+                    --namespace=${{ env.NAMESPACE }} \
+                    --timeout=300s
+
       - name: Verify deployment
         run: |
           echo "✅ Deployment completed. Verifying status..."

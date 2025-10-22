@@ -100,7 +100,7 @@
       "maintenance-service-route": {
         "ClusterId": "maintenance-service-cluster",
         "Match": {
-          "Path": "/api/maintenance/{**catch-all}"
+          "Path": "/api/item-maintenances/{**catch-all}"
         }
       },
       "payment-service-route": {
