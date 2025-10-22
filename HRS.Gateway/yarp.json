@@ -106,7 +106,7 @@
       "payment-service-route": {
         "ClusterId": "payment-service-cluster",
         "Match": {
-          "Path": "/api/payment/{**catch-all}"
+          "Path": "/api/payments/{**catch-all}"
         }
       },
       "item-service-route": {
