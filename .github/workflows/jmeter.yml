@@ -1,0 +1,199 @@
+name: JMeter Test
+run-name: JMeter • threads=${{ inputs.threads || '2000' }} ramp=${{ inputs.ramp || '1' }} dur=${{ inputs.duration || '60' }} days=${{ inputs.window_days || '7' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      threads:
+        {
+          description: "Number of virtual users",
+          required: false,
+          default: "100",
+        }
+      ramp: { description: "Ramp-up in seconds", required: false, default: "1" }
+      duration:
+        { description: "Duration in seconds", required: false, default: "180" }
+      window_days:
+        {
+          description: "Lookback window in days",
+          required: false,
+          default: "7",
+        }
+  schedule:
+    - cron: "0 19 * * *"
+  push:
+    branches: ["develop"]
+  pull_request:
+    branches: ["develop"]
+
+env:
+  JMETER_VERSION: "5.6.3"
+  TEST_PLAN: "tests/jmeter/hrs_test.jmx"
+
+  P90_MS: "4000"
+  ERR_PCT: "0"
+
+  THREADS: ${{ github.event.inputs.threads      || '2000' }}
+  RAMP: ${{ github.event.inputs.ramp         || '1'   }}
+  DURATION: ${{ github.event.inputs.duration     || '60'  }}
+  WINDOW_DAYS: ${{ github.event.inputs.window_days  || '7'   }}
+
+jobs:
+  jmeter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: jmeter-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install JMeter and tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq bc
+          curl -sSL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" -o jmeter.tgz
+          tar -xzf jmeter.tgz
+          echo "JMETER_HOME=$PWD/apache-jmeter-${JMETER_VERSION}" >> "$GITHUB_ENV"
+          echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Compute startDate / endDate (UTC ISO-8601)
+        run: |
+          END=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+          START=$(date -u -d "-${WINDOW_DAYS} days" +"%Y-%m-%dT%H:%M:%S.000Z")
+          echo "START_DATE=$START" >> "$GITHUB_ENV"
+          echo "END_DATE=$END" >> "$GITHUB_ENV"
+          echo "Computed window: $START -> $END"
+
+      - name: Run JMeter (non-GUI)
+        run: |
+          set -e
+          mkdir -p artifacts
+          BASE="${{ secrets.API_BASE_URL }}"
+          PROTO=$(echo "$BASE" | sed -E 's#^(https?)://.*#\1#')
+          HOST=$(echo "$BASE"  | sed -E 's#^https?://([^/]+)/?.*#\1#')
+
+          jmeter -n -t "${TEST_PLAN}" \
+            -JbaseUrl="$BASE" \
+            -Jproto="$PROTO" \
+            -Jhost="$HOST" \
+            -Jemail="${{ secrets.JMETER_USER }}" \
+            -Jpassword="${{ secrets.JMETER_PASS }}" \
+            -Jthreads="${THREADS}" \
+            -Jramp="${RAMP}" \
+            -Jduration="${DURATION}" \
+            -JstartDate="${START_DATE}" \
+            -JendDate="${END_DATE}" \
+            -Jjmeter.save.saveservice.output_format=csv \
+            -Jjmeter.save.saveservice.print_field_names=true \
+            -Jjmeter.save.saveservice.time=true \
+            -Jjmeter.save.saveservice.label=true \
+            -Jjmeter.save.saveservice.response_code=true \
+            -Jjmeter.save.saveservice.success=true \
+            -Jjmeter.save.saveservice.latency=true \
+            -j "artifacts/jmeter.log" \
+            -l "artifacts/results.csv" \
+            -e -o "artifacts/report"
+
+      - name: Write split summaries (login & get catalog)
+        run: |
+          STATS=$(find artifacts/report -type f -name "statistics.json" | head -n1 || true)
+          if [ -n "$STATS" ] && [ -s "$STATS" ]; then
+            write_one () {
+              local label="$1"
+              local row
+              row=$(jq -r --arg L "$label" '.items[]? | select(.label==$L) | [.label,.sampleCount,.meanResTime,.pct1ResTime,.pct2ResTime,.pct3ResTime,.minResTime,.maxResTime,.errorPct,.throughput] | @tsv' "$STATS")
+              echo "#### ${label}" >> "$GITHUB_STEP_SUMMARY"
+              if [ -z "$row" ]; then
+                echo "> No data for label: ${label}" >> "$GITHUB_STEP_SUMMARY"; echo "" >> "$GITHUB_STEP_SUMMARY"; return
+              fi
+              IFS=$'\t' read -r _label samples avg p90 p95 p99 min max err thr <<< "$row"
+              {
+                echo ""
+                echo "| Metric | Value |"; echo "|---|---:|"
+                echo "| Samples | $samples |"
+                echo "| Avg (ms) | $avg |"
+                echo "| p90 (ms) | $p90 |"
+                echo "| p95 (ms) | $p95 |"
+                echo "| p99 (ms) | $p99 |"
+                echo "| Min (ms) | $min |"
+                echo "| Max (ms) | $max |"
+                echo "| Error % | $err |"
+                echo "| Throughput (req/s) | $thr |"
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            }
+            echo "### JMeter Summary (split by label)" >> "$GITHUB_STEP_SUMMARY"; echo "" >> "$GITHUB_STEP_SUMMARY"
+            write_one "login"
+            write_one "get catalog"
+          else
+            echo "### JMeter Summary (split by label)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> HTML statistics.json missing; skipped split summary (will use CSV for gate)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Print JMeter errors (top)
+        if: always()
+        run: |
+          echo "---- tail jmeter.log ----"
+          tail -n 200 artifacts/jmeter.log || true
+          echo "---- response code distribution (from CSV) ----"
+          if [ -f artifacts/results.csv ]; then
+            # CSV: timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,bytes,grpThreads,allThreads,Latency,...
+            awk -F, 'NR>1 {print $4}' artifacts/results.csv | sort | uniq -c | sort -nr || true
+          fi
+          echo "---- report dir ----"; ls -R artifacts/report || true
+
+      - name: Gate on errors & p90 (robust with CSV fallback)
+        run: |
+          set -e
+          P90_TGT=${P90_MS}
+          ERR_TGT=${ERR_PCT}
+
+          # 先尝试 statistics.json
+          STATS=$(find artifacts/report -type f -name "statistics.json" | head -n1 || true)
+          if [ -n "$STATS" ] && [ -s "$STATS" ]; then
+            HAS_OVERALL=$(jq 'has("overall") or has("Overall")' "$STATS")
+            if [ "$HAS_OVERALL" = "true" ]; then
+              MEAN=$(jq '.overall.meanResTime // .Overall.meanResTime' "$STATS")
+              P90=$(jq  '.overall.pct1ResTime  // .Overall.pct1ResTime'  "$STATS")
+              ERR=$(jq  '.overall.errorPct     // .Overall.errorPct'     "$STATS")
+              echo "overall(from statistics.json): mean=${MEAN} ms, p90=${P90} ms, errors=${ERR}%"
+              if [ "$(echo "$ERR > ${ERR_TGT}" | bc -l)" -eq 1 ]; then echo "::error::Overall error ${ERR}% > ${ERR_TGT}%"; exit 1; fi
+              if [ "$(echo "$P90 > ${P90_TGT}" | bc -l)" -eq 1 ]; then echo "::error::Overall p90 ${P90}ms > ${P90_TGT}ms"; exit 1; fi
+              exit 0
+            fi
+          fi
+
+          CSV="artifacts/results.csv"
+          if [ ! -s "$CSV" ]; then
+            echo "::error::No statistics.json and CSV missing"; exit 1
+          fi
+
+          TOTAL=$(awk -F, 'NR>1 {c++} END{print c+0}' "$CSV")
+          FAILS=$(awk -F, 'NR>1 && $8=="false" {c++} END{print c+0}' "$CSV")
+          ERR=$(awk -v T=$TOTAL -v F=$FAILS 'BEGIN{ if(T==0){print 0}else{printf "%.4f", (F*100.0/T)} }')
+
+          P90=$(awk -F, 'NR>1 {print $2}' "$CSV" | sort -n | awk -v N=$TOTAL 'BEGIN{k=int(0.9*N); if(k<1)k=1} NR==k{print; exit}')
+          if [ -z "$P90" ]; then P90=0; fi
+
+          MEAN=$(awk -F, 'NR>1 {sum+=$2; n++} END{ if(n==0){print 0}else{printf "%.2f", sum/n} }' "$CSV")
+
+          echo "overall(from CSV): mean=${MEAN} ms, p90=${P90} ms, errors=${ERR}%"
+          if [ "$(echo "$ERR > ${ERR_TGT}" | bc -l)" -eq 1 ]; then echo "::error::Overall error ${ERR}% > ${ERR_TGT}%"; exit 1; fi
+          if [ "$(echo "$P90 > ${P90_TGT}" | bc -l)" -eq 1 ]; then echo "::error::Overall p90 ${P90}ms > ${P90_TGT}ms"; exit 1; fi
+
+      - name: Upload JMeter report & results
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-report
+          path: artifacts/
+          if-no-files-found: error
