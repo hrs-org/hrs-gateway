@@ -13,15 +13,15 @@
     </TestPlan>
     <hashTree>
 
-      <!-- HTTP 默认项：不再硬编码域名/协议；baseUrl 由 -JbaseUrl 传入并用于各采样器的 Path -->
+      <!-- HTTP 默认项：使用 proto 和 host 参数 -->
       <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults" enabled="true">
         <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
           <collectionProp name="Arguments.arguments"/>
         </elementProp>
-        <stringProp name="HTTPSampler.arguments"></stringProp>
-        <stringProp name="HTTPSampler.domain"></stringProp>
+        <stringProp name="HTTPsampler.Arguments"></stringProp>
+        <stringProp name="HTTPSampler.domain">${__P(host,)}</stringProp>
         <stringProp name="HTTPSampler.port"></stringProp>
-        <stringProp name="HTTPSampler.protocol"></stringProp>
+        <stringProp name="HTTPSampler.protocol">${__P(proto,https)}</stringProp>
         <stringProp name="HTTPSampler.contentEncoding"></stringProp>
         <stringProp name="HTTPSampler.path"></stringProp>
         <stringProp name="HTTPSampler.concurrentPool">6</stringProp>
@@ -66,8 +66,7 @@
           <stringProp name="HTTPSampler.domain"></stringProp>
           <stringProp name="HTTPSampler.port"></stringProp>
           <stringProp name="HTTPSampler.protocol"></stringProp>
-          <!-- 使用 baseUrl -->
-          <stringProp name="HTTPSampler.path">${baseUrl}/api/auth/login</stringProp>
+          <stringProp name="HTTPSampler.path">/api/auth/login</stringProp>
           <stringProp name="HTTPSampler.method">POST</stringProp>
           <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
           <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
@@ -142,7 +141,7 @@
               </elementProp>
             </collectionProp>
           </elementProp>
-          <stringProp name="HTTPSampler.path">${baseUrl}/api/catalogs</stringProp>
+          <stringProp name="HTTPSampler.path">/api/catalogs</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
           <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
           <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
