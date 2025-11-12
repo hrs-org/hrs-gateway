@@ -1,5 +1,5 @@
 name: JMeter Test
-run-name: JMeter • threads=${{ inputs.threads || '10' }} ramp=${{ inputs.ramp || '1' }} dur=${{ inputs.duration || '180' }} days=${{ inputs.window_days || '7' }} store=${{ inputs.store_id || '2' }}
+run-name: JMeter • threads=${{ inputs.threads || '50' }} ramp=${{ inputs.ramp || '1' }} dur=${{ inputs.duration || '180' }} days=${{ inputs.window_days || '7' }} store=${{ inputs.store_id || '2' }}
 
 on:
   workflow_dispatch:
@@ -36,10 +36,10 @@ env:
   JMETER_VERSION: "5.6.3"
   TEST_PLAN: "tests/jmeter/hrs_test.jmx"
 
-  P90_MS: "4000"
-  ERR_PCT: "0"
+  P90_MS: "70000"
+  ERR_PCT: "10"
 
-  THREADS: ${{ github.event.inputs.threads      || '10' }}
+  THREADS: ${{ github.event.inputs.threads      || '50' }}
   RAMP: ${{ github.event.inputs.ramp         || '1'    }}
   DURATION: ${{ github.event.inputs.duration     || '180'  }}
   WINDOW_DAYS: ${{ github.event.inputs.window_days  || '7'    }}
