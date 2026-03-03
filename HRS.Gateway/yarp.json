@@ -138,42 +138,42 @@
       "user-service-cluster": {
         "Destinations": {
           "primary": {
-            "Address": "http://hrs-user-service.users.svc.cluster.local"
+            "Address": "http://hrs-user-service.uat.svc.cluster.local"
           }
         }
       },
       "email-service-cluster": {
         "Destinations": {
           "primary": {
-            "Address": "http://hrs-email-service.email.svc.cluster.local"
+            "Address": "http://hrs-email-service.uat.svc.cluster.local"
           }
         }
       },
       "maintenance-service-cluster": {
         "Destinations": {
           "primary": {
-            "Address": "http://hrs-maintenance-service.maintenance.svc.cluster.local"
+            "Address": "http://hrs-maintenance-service.uat.svc.cluster.local"
           }
         }
       },
       "payment-service-cluster": {
         "Destinations": {
           "primary": {
-            "Address": "http://hrs-payment-service.payments.svc.cluster.local"
+            "Address": "http://hrs-payment-service.uat.svc.cluster.local"
           }
         }
       },
       "inventory-service-cluster": {
         "Destinations": {
           "primary": {
-            "Address": "http://hrs-inventory-service.inventory.svc.cluster.local"
+            "Address": "http://hrs-inventory-service.uat.svc.cluster.local"
           }
         }
       },
       "order-service-cluster": {
         "Destinations": {
           "primary": {
-            "Address": "http://hrs-order-service.orders.svc.cluster.local"
+            "Address": "http://hrs-order-service.uat.svc.cluster.local"
           }
         }
       }

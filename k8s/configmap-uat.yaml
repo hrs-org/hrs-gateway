@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: hrs-gateway-config
-  namespace: hrs-uat
+  namespace: uat
 data:
   appsettings.Production.json: |
     {
