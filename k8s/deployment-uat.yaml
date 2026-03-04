@@ -17,6 +17,13 @@ spec:
         app: hrs-gateway
         environment: uat
     spec:
+      # SNYK-CC-K8S-6: Add security context at pod level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: hrs-gateway
           image: __ACR_NAME__.azurecr.io/hrs-gateway-uat:__IMAGE_TAG__
@@ -37,6 +44,21 @@ spec:
               value: "__CORS_ORIGIN_0__"
             - name: Cors__AllowedOrigins__1
               value: "__CORS_ORIGIN_1__"
+          # SNYK-CC-K8S-9, 10, 11, 8, 42: Add container security context
+          securityContext:
+            allowPrivilegeEscalation: false # SNYK-CC-K8S-8
+            privileged: false # SNYK-CC-K8S-9
+            runAsNonRoot: true # SNYK-CC-K8S-10
+            runAsUser: 1000 # SNYK-CC-K8S-10
+            readOnlyRootFilesystem: true # SNYK-CC-K8S-6
+            capabilities:
+              drop:
+                - ALL # SNYK-CC-K8S-11, 42
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: aspnet-tmp
+              mountPath: /app/.aspnet
           readinessProbe:
             httpGet:
               path: /health/ready
@@ -60,6 +82,11 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: aspnet-tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
