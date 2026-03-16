@@ -1,6 +1,6 @@
 name: Release UAT to AKS
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       version:
@@ -25,7 +25,7 @@ permissions:
 env:
   AZURE_RESOURCE_GROUP: rg-hrsm-uat
   AKS_CLUSTER_NAME: hrsm-uat-aks
-  NAMESPACE: gateway
+  NAMESPACE: uat
   DEPLOYMENT_NAME: hrs-gateway-uat
   SERVICE_NAME: hrs-gateway-uat-svc
 
@@ -37,6 +37,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Validate target environment
+        run: |
+          if [ "${{ github.event.inputs.environment }}" != "uat" ]; then
+            echo "This workflow only deploys the UAT manifest and UAT AKS resources."
+            exit 1
+          fi
 
       - name: Set up Azure CLI
         uses: azure/login@v1
