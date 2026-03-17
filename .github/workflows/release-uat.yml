@@ -66,6 +66,23 @@ jobs:
         run: |
           kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Ensure cert-manager is installed
+        run: |
+          if kubectl api-resources | grep -q '^certificates[[:space:]]'; then
+            echo "cert-manager CRDs already present."
+          else
+            echo "Installing cert-manager CRDs and controllers..."
+            kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.3/cert-manager.yaml
+          fi
+
+          kubectl -n cert-manager wait --for=condition=Available --timeout=300s deployment/cert-manager deployment/cert-manager-webhook deployment/cert-manager-cainjector
+
+      - name: Configure TLS ingress resources
+        run: |
+          kubectl apply -f k8s/clussterissuer-uat.yaml
+          kubectl apply -f k8s/ingress-uat.yaml
+          kubectl delete ingress hrs-gateway-ingress -n ${{ env.NAMESPACE }} --ignore-not-found
+
       - name: Attach ACR to AKS (if not already attached)
         run: |
           az aks update \
@@ -164,8 +181,8 @@ jobs:
           kubectl get service ${{ env.SERVICE_NAME }} -n ${{ env.NAMESPACE }}
           echo ""
 
-          echo "🔗 Ingress status:"
-          kubectl get ingress hrs-gateway-ingress -n ${{ env.NAMESPACE }} || echo "No ingress configured"
+          echo "🔗 Ingress status (TLS ingress):"
+          kubectl get ingress hrs-ingress-uat -n ${{ env.NAMESPACE }} || echo "TLS ingress not found"
           echo ""
 
           echo "📜 Deployment history:"
