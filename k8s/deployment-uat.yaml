@@ -20,8 +20,8 @@ spec:
       # SNYK-CC-K8S-6: Add security context at pod level
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 10001 # High UID to avoid host conflicts
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -49,7 +49,7 @@ spec:
             allowPrivilegeEscalation: false # SNYK-CC-K8S-8
             privileged: false # SNYK-CC-K8S-9
             runAsNonRoot: true # SNYK-CC-K8S-10
-            runAsUser: 1000 # SNYK-CC-K8S-10
+            runAsUser: 10001 # SNYK-CC-K8S-10 (high UID)
             readOnlyRootFilesystem: true # SNYK-CC-K8S-6
             capabilities:
               drop:
