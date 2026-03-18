@@ -1,5 +1,6 @@
 using HRS.Gateway.Configuration;
 using HRS.Gateway.Extensions;
+using HRS.Gateway.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +15,7 @@ if (corsSettings.AllowedOrigins.Length == 0)
     throw new InvalidOperationException("CORS AllowedOrigins must be configured in appsettings.json");
 }
 
-builder.Logging.AddConsole();
+builder.Logging.AddJsonConsole();
 var logger = builder.Services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
 logger.LogInformation("CORS Policy: {PolicyName}", corsSettings.PolicyName);
 logger.LogInformation("Allowed Origins: {Origins}", string.Join(", ", corsSettings.AllowedOrigins));
@@ -69,6 +70,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddHealthChecks();
+builder.Services.AddSingleton<YarpRouteResolver>();
 
 builder.Services
     .AddReverseProxy()
@@ -92,6 +94,7 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<SecurityLoggingMiddleware>();
 
 app.MapControllers();
 
