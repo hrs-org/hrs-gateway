@@ -18,6 +18,7 @@ spec:
         environment: uat
     spec:
       serviceAccountName: hrs-gateway-sa
+      automountServiceAccountToken: false
       # SNYK-CC-K8S-6: Add security context at pod level
       securityContext:
         runAsNonRoot: true
