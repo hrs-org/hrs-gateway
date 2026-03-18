@@ -87,10 +87,9 @@ if (app.Environment.IsDevelopment())
         string.Join(", ", corsSettings.AllowedOrigins));
 }
 
-app.UseCors(corsSettings.PolicyName);
-
 app.UseHttpsRedirection();
 app.UseRouting();
+app.UseCors(corsSettings.PolicyName);
 
 app.UseAuthentication();
 app.UseAuthorization();
