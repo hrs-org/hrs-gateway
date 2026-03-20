@@ -66,6 +66,10 @@ jobs:
         run: |
           kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Label namespace for Istio sidecar injection
+        run: |
+          kubectl label namespace ${{ env.NAMESPACE }} istio-injection=enabled --overwrite
+
       - name: Ensure cert-manager is installed
         run: |
           if kubectl api-resources | grep -q '^certificates[[:space:]]'; then
