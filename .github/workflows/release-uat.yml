@@ -289,11 +289,11 @@ jobs:
     environment: ${{ github.event.inputs.environment }}
     steps:
       - name: Run gateway integration tests
+        env:
+          BASE_URL: ${{ secrets.UAT_API_ENDPOINT }}
+          FRONTEND_ORIGIN: ${{ secrets.CORS_ORIGIN_UAT }}
         run: |
           set -euo pipefail
-
-          BASE_URL="${{ secrets.UAT_API_ENDPOINT  }}"
-          FRONTEND_ORIGIN="${{ secrets.CORS_ORIGIN_UAT  }}"
 
           BASE_URL="${BASE_URL%/}"
           FRONTEND_ORIGIN="${FRONTEND_ORIGIN%/}"
@@ -313,14 +313,17 @@ jobs:
 
       - name: Post integration summary
         if: always()
+        env:
+          GATEWAY_ENDPOINT: ${{ secrets.UAT_API_ENDPOINT }}
+          FRONTEND_ORIGIN: ${{ secrets.CORS_ORIGIN_UAT  }}
         run: |
           echo "## 🧪 Gateway Integration Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Environment** | \`${{ github.event.inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Gateway Endpoint** | \`${{ secrets.UAT_API_ENDPOINT || 'https://api.hrs-uat.shop' }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Frontend Origin** | \`${{ secrets.CORS_ORIGIN_UAT || 'https://hrs-frontend-uat.azurewebsites.net' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Gateway Endpoint** | \`${GATEWAY_ENDPOINT}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend Origin** | \`${FRONTEND_ORIGIN}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ job.status }}" == "success" ]; then
