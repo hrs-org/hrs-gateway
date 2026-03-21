@@ -200,7 +200,15 @@ jobs:
   docker-build:
     name: Build & Push Docker Image to ACR
     runs-on: ubuntu-latest
-    needs: [build, code-quality, lint, security-scan]
+    needs:
+      [
+        build,
+        code-quality,
+        lint,
+        security-scan,
+        secret-scan,
+        Container-Security-Scan,
+      ]
     if: github.event_name == 'push'
     environment: uat
     outputs:
