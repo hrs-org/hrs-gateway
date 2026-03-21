@@ -160,7 +160,7 @@ jobs:
             --output /dev/null --write-out '%{url_effective}' "$ASSET_URL")
 
           case "$FINAL_URL" in
-            https://github.com/*|https://objects.githubusercontent.com/*|https://github-releases.githubusercontent.com/*)
+            https://github.com/*|https://objects.githubusercontent.com/*|https://github-releases.githubusercontent.com/*|https://release-assets.githubusercontent.com/*)
               echo "Resolved download host is trusted: $FINAL_URL"
               ;;
             *)
