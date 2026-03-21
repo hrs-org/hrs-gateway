@@ -142,6 +142,18 @@ jobs:
           name: security-scan-results
           path: security-audit.txt
           retention-days: 7
+  secret-scan:
+    name: Scan for Secrets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --verbose --redact --exit-code 1
 
   docker-build:
     name: Build & Push Docker Image to ACR
