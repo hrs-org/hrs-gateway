@@ -150,10 +150,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Gitleaks CLI
+        run: |
+          GITLEAKS_VERSION="8.24.2"
+          wget -qO gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
       - name: Run Gitleaks Scan
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: detect --source . --verbose --redact --exit-code 1
+        run: gitleaks detect --source . --verbose --redact --exit-code 1
 
   Container-Security-Scan:
     name: Run Trivy Scan- Container Security Scan
@@ -173,7 +179,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Build Docker Image
-        run: docker build -t my-app:latest .
+        run: docker build -t my-app:latest -f ./HRS.Gateway/DockerFile ./HRS.Gateway
 
       - name: Run Trivy Image Scan
         uses: aquasecurity/trivy-action@v0.20.0
