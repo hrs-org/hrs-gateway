@@ -153,7 +153,25 @@ jobs:
       - name: Install Gitleaks CLI
         run: |
           GITLEAKS_VERSION="8.24.2"
-          wget -qO gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          ASSET_URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+
+          FINAL_URL=$(curl --silent --show-error --location \
+            --proto '=https' --tlsv1.2 --max-redirs 5 \
+            --output /dev/null --write-out '%{url_effective}' "$ASSET_URL")
+
+          case "$FINAL_URL" in
+            https://github.com/*|https://objects.githubusercontent.com/*|https://github-releases.githubusercontent.com/*)
+              echo "Resolved download host is trusted: $FINAL_URL"
+              ;;
+            *)
+              echo "Untrusted redirect target: $FINAL_URL"
+              exit 1
+              ;;
+          esac
+
+          curl --silent --show-error --location \
+            --proto '=https' --tlsv1.2 --max-redirs 5 \
+            --output gitleaks.tar.gz "$ASSET_URL"
           tar -xzf gitleaks.tar.gz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
           gitleaks version
