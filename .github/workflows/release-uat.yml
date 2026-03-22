@@ -281,3 +281,53 @@ jobs:
 
           echo "Rollback completed. Current deployment status:"
           kubectl get deployment ${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }}
+
+  Integration-Tests:
+    name: Integration-Tests
+    runs-on: ubuntu-latest
+    needs: deploy-to-aks
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Run gateway integration tests
+        env:
+          BASE_URL: ${{ secrets.UAT_API_ENDPOINT }}
+          FRONTEND_ORIGIN: ${{ secrets.CORS_ORIGIN_UAT }}
+        run: |
+          set -euo pipefail
+
+          BASE_URL="${BASE_URL%/}"
+          FRONTEND_ORIGIN="${FRONTEND_ORIGIN%/}"
+
+          echo "Testing gateway endpoint: $BASE_URL"
+
+          echo "Checking gateway liveness"
+          curl -sSf "$BASE_URL/health" >/dev/null
+
+          echo "Checking gateway readiness"
+          curl -sSf "$BASE_URL/health/ready" >/dev/null
+
+          echo "Checking reverse-proxy route to email service"
+          curl -sSf "$BASE_URL/health/email" >/dev/null
+
+          echo "Gateway integration tests passed"
+
+      - name: Post integration summary
+        if: always()
+        env:
+          GATEWAY_ENDPOINT: ${{ secrets.UAT_API_ENDPOINT }}
+          FRONTEND_ORIGIN: ${{ secrets.CORS_ORIGIN_UAT  }}
+        run: |
+          echo "## 🧪 Gateway Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ github.event.inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Gateway Endpoint** | \`${GATEWAY_ENDPOINT}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend Origin** | \`${FRONTEND_ORIGIN}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "### ✅ Status: Integration Tests Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Status: Integration Tests Failed" >> $GITHUB_STEP_SUMMARY
+          fi
