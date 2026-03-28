@@ -91,6 +91,19 @@ app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors(corsSettings.PolicyName);
 
+app.Use(async (context, next) =>
+{
+    await next();
+
+    // Apply secure defaults for API/gateway responses to reduce cache-related leakage risk.
+    context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+    context.Response.Headers["Pragma"] = "no-cache";
+    context.Response.Headers["Expires"] = "0";
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<SecurityLoggingMiddleware>();
