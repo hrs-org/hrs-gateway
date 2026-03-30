@@ -5,11 +5,11 @@ namespace HRS.Gateway.Middleware;
 /// </summary>
 public class AuthorizationMiddleware
 {
-  private readonly RequestDelegate _next;
-  private readonly ILogger<AuthorizationMiddleware> _logger;
+    private readonly RequestDelegate _next;
+    private readonly ILogger<AuthorizationMiddleware> _logger;
 
-  // Routes that don't require authentication
-  private static readonly HashSet<string> PublicRoutes = new(StringComparer.OrdinalIgnoreCase)
+    // Routes that don't require authentication
+    private static readonly HashSet<string> PublicRoutes = new(StringComparer.OrdinalIgnoreCase)
     {
         "/health",
         "/health/users",
@@ -22,54 +22,54 @@ public class AuthorizationMiddleware
         "/api/stores/register"
     };
 
-  public AuthorizationMiddleware(RequestDelegate next, ILogger<AuthorizationMiddleware> logger)
-  {
-    _next = next;
-    _logger = logger;
-  }
-
-  public async Task InvokeAsync(HttpContext context)
-  {
-    var path = context.Request.Path.Value ?? string.Empty;
-
-    // Check if the route is public
-    if (IsPublicRoute(path))
+    public AuthorizationMiddleware(RequestDelegate next, ILogger<AuthorizationMiddleware> logger)
     {
-      _logger.LogDebug("Public route accessed: {Path}", path);
-      await _next(context);
-      return;
+        _next = next;
+        _logger = logger;
     }
 
-    // Check if user is authenticated
-    if (!context.User.Identity?.IsAuthenticated ?? true)
+    public async Task InvokeAsync(HttpContext context)
     {
-      _logger.LogWarning("Unauthorized access attempt to protected route: {Path}", path);
-      context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-      await context.Response.WriteAsJsonAsync(new
-      {
-        error = "Unauthorized",
-        message = "Valid JWT token required"
-      });
-      return;
+        var path = context.Request.Path.Value ?? string.Empty;
+
+        // Check if the route is public
+        if (IsPublicRoute(path))
+        {
+            _logger.LogDebug("Public route accessed: {Path}", path);
+            await _next(context);
+            return;
+        }
+
+        // Check if user is authenticated
+        if (!context.User.Identity?.IsAuthenticated ?? true)
+        {
+            _logger.LogWarning("Unauthorized access attempt to protected route: {Path}", path);
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "Unauthorized",
+                message = "Valid JWT token required"
+            });
+            return;
+        }
+
+        _logger.LogDebug("Authenticated user accessing route: {Path}", path);
+        await _next(context);
     }
 
-    _logger.LogDebug("Authenticated user accessing route: {Path}", path);
-    await _next(context);
-  }
-
-  private static bool IsPublicRoute(string path)
-  {
-    // Exact match
-    if (PublicRoutes.Contains(path))
-      return true;
-
-    // Check for prefix matches (e.g., /auth/register)
-    foreach (var publicRoute in PublicRoutes)
+    private static bool IsPublicRoute(string path)
     {
-      if (path.StartsWith(publicRoute + "/", StringComparison.OrdinalIgnoreCase))
-        return true;
-    }
+        // Exact match
+        if (PublicRoutes.Contains(path))
+            return true;
 
-    return false;
-  }
+        // Check for prefix matches (e.g., /auth/register)
+        foreach (var publicRoute in PublicRoutes)
+        {
+            if (path.StartsWith(publicRoute + "/", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
 }
