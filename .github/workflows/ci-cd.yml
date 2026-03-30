@@ -338,15 +338,20 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Pull and run Docker image
+        env:
+          IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
         run: |
           az acr login --name ${{ secrets.ACR_NAME }}
-          IMAGE_TAG="${{ needs.docker-build.outputs.image_tag }}"
 
           echo "Pulling image: ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
           docker pull ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}
 
           echo "Starting container..."
           docker run -d -p 5000:8080 --name hrs-gateway \
+            -e Auth0__Domain="$AUTH0_DOMAIN" \
+            -e Auth0__Audience="$AUTH0_AUDIENCE" \
             ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}
 
           echo "Waiting for application to start..."

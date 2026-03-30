@@ -126,15 +126,15 @@ jobs:
           # Replace placeholders in the deployment file
           sed "s|__ACR_NAME__|${{ secrets.ACR_NAME }}|g" k8s/deployment-uat.yaml | \
           sed "s|__IMAGE_TAG__|${{ github.event.inputs.version }}|g" | \
-          sed "s|__JWT_KEY__|${{ secrets.JWT_KEY }}|g" | \
-          sed "s|__JWT_ISSUER__|${{ secrets.JWT_ISSUER || 'https://auth.hrs.com' }}|g" | \
+          sed "s|__AUTH0_DOMAIN__|${{ secrets.AUTH0_DOMAIN }}|g" | \
+          sed "s|__AUTH0_AUDIENCE__|${{ secrets.AUTH0_AUDIENCE }}|g" | \
           sed "s|__CORS_ORIGIN_0__|${{ secrets.CORS_ORIGIN_LOCALHOST || 'http://localhost:4200' }}|g" | \
           sed "s|__CORS_ORIGIN_1__|${{ secrets.CORS_ORIGIN_UAT || 'https://hrs-frontend-uat.azurewebsites.net' }}|g" \
           > k8s/deployment-final.yaml
 
           # Show the final manifest for debugging (mask sensitive values)
           echo "=== Final Deployment Manifest (sensitive values masked) ==="
-          cat k8s/deployment-final.yaml | grep -v -E "(JWT_KEY|CORS_ORIGIN)" || cat k8s/deployment-final.yaml
+          cat k8s/deployment-final.yaml | grep -v -E "(AUTH0_DOMAIN|CORS_ORIGIN)" || cat k8s/deployment-final.yaml
 
       - name: Deploy to AKS
         run: |
