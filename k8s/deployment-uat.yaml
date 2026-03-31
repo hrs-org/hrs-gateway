@@ -38,10 +38,10 @@ spec:
               value: "Production"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
-            - name: Jwt__Key
-              value: "__JWT_KEY__"
-            - name: Jwt__Issuer
-              value: "__JWT_ISSUER__"
+            - name: Auth0__Domain
+              value: "__AUTH0_DOMAIN__"
+            - name: Auth0__Audience
+              value: "__AUTH0_AUDIENCE__"
             - name: Cors__AllowedOrigins__0
               value: "__CORS_ORIGIN_0__"
             - name: Cors__AllowedOrigins__1
