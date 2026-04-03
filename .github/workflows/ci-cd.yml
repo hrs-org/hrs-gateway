@@ -409,6 +409,10 @@ jobs:
       - name: Pull and run Docker image
         env:
           IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
+        env:
+          IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
         run: |
           az acr login --name ${{ secrets.ACR_NAME }}
 
@@ -427,6 +431,8 @@ jobs:
           docker run -d -p ${DAST_HOST_PORT}:${DAST_CONTAINER_PORT} --name hrs-gateway \
             -e Jwt__Key="${{ secrets.JWT_KEY || 'dev-jwt-key-for-security-scan-32chars' }}" \
             -e Jwt__Issuer="${{ secrets.JWT_ISSUER || 'https://auth.hrs.com' }}" \
+            -e Auth0__Domain="$AUTH0_DOMAIN" \
+            -e Auth0__Audience="$AUTH0_AUDIENCE" \
             ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}
 
           echo "Waiting for application to start..."
