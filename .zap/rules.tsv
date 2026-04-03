@@ -1,0 +1,6 @@
+# ZAP baseline rules for hrs-gateway
+# Format: <ruleId>\t<IGNORE|WARN|FAIL>\t[optional comment]
+# INFO-level alerts are ignored by workflow cmd_options using: -l WARN
+# Add explicit per-rule overrides below when needed.
+90005	IGNORE	Sec-Fetch-* request headers are browser-supplied and not server-remediable
+10049	IGNORE	Gateway intentionally sets no-store cache headers for security
