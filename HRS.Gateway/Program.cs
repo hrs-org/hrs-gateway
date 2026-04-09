@@ -132,7 +132,6 @@ app.MapHealthChecks("/health");
 app.MapGet("/health/ready", () => Results.Ok(new
 {
     status = "ready",
-    timestamp = DateTime.UtcNow,
     environment = app.Environment.EnvironmentName,
     corsPolicy = corsSettings.PolicyName,
     allowedOrigins = corsSettings.AllowedOrigins
@@ -140,8 +139,7 @@ app.MapGet("/health/ready", () => Results.Ok(new
 
 app.MapGet("/health/live", () => Results.Ok(new
 {
-    status = "live",
-    timestamp = DateTime.UtcNow
+    status = "live"
 })).AllowAnonymous();
 
 app.MapReverseProxy()

@@ -266,7 +266,7 @@ jobs:
         with:
           target: "http://localhost:8080"
           rules_file_name: ".zap/rules.tsv"
-          cmd_options: "-a -j -l WARN -T 10 -I"
+          cmd_options: "-a -j -l WARN -T 10 -I -config globalexcludeurl.url_list.url(0)=https://firefox-settings-attachments.cdn.mozilla.net.*"
 
       - name: Upload DAST scan results
         uses: actions/upload-artifact@v4
@@ -446,7 +446,7 @@ jobs:
         with:
           target: "http://localhost:${{ env.DAST_HOST_PORT }}"
           rules_file_name: ".zap/rules.tsv"
-          cmd_options: "-a -j -l WARN -T 10 -I"
+          cmd_options: "-a -j -l WARN -T 10 -I -config globalexcludeurl.url_list.url(0)=https://firefox-settings-attachments.cdn.mozilla.net.*"
 
       - name: Upload DAST scan results
         uses: actions/upload-artifact@v4
