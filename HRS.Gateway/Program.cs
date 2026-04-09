@@ -98,15 +98,26 @@ app.UseCors(corsSettings.PolicyName);
 
 app.Use(async (context, next) =>
 {
-    await next();
+    context.Response.OnStarting(() =>
+    {
+        // Apply secure defaults for API/gateway responses to reduce cache-related leakage risk.
+        context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+        context.Response.Headers["Pragma"] = "no-cache";
+        context.Response.Headers["Expires"] = "0";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+        context.Response.Headers["Cross-Origin-Resource-Policy"] = "same-origin";
 
-    // Apply secure defaults for API/gateway responses to reduce cache-related leakage risk.
-    context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
-    context.Response.Headers["Pragma"] = "no-cache";
-    context.Response.Headers["Expires"] = "0";
-    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    context.Response.Headers["X-Frame-Options"] = "DENY";
-    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+        if (context.Request.IsHttps)
+        {
+            context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+        }
+
+        return Task.CompletedTask;
+    });
+
+    await next();
 });
 
 app.UseAuthentication();
