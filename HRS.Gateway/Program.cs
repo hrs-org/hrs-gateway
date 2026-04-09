@@ -1,6 +1,7 @@
 using HRS.Gateway.Configuration;
 using HRS.Gateway.Extensions;
 using HRS.Gateway.Middleware;
+using Microsoft.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -111,7 +112,7 @@ app.Use(async (context, next) =>
 
         if (context.Request.IsHttps)
         {
-            context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+            context.Response.Headers[HeaderNames.StrictTransportSecurity] = "max-age=31536000; includeSubDomains";
         }
 
         return Task.CompletedTask;
