@@ -4,3 +4,4 @@
 # Add explicit per-rule overrides below when needed.
 90005	IGNORE	Sec-Fetch-* request headers are browser-supplied and not server-remediable
 10049	IGNORE	Gateway intentionally sets no-store cache headers for security
+10035	IGNORE	HSTS requires HTTPS; DAST targets HTTP localhost
