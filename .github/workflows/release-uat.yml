@@ -154,7 +154,7 @@ jobs:
           echo "⏳ Waiting for deployment to complete..."
           kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} \
             --namespace=${{ env.NAMESPACE }} \
-            --timeout=300s
+            --timeout=600s
 
       - name: Force restart deployment
         run: |
