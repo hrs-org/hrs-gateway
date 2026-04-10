@@ -152,9 +152,42 @@ jobs:
       - name: Wait for deployment rollout
         run: |
           echo "⏳ Waiting for deployment to complete..."
-          kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} \
+          TIMEOUT_SECONDS=600
+          POLL_INTERVAL=15
+          ELAPSED=0
+
+          while [ "$ELAPSED" -lt "$TIMEOUT_SECONDS" ]; do
+            if kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} \
+              --namespace=${{ env.NAMESPACE }} \
+              --timeout=${POLL_INTERVAL}s; then
+              echo "✅ Deployment rollout completed successfully"
+              exit 0
+            fi
+
+            ELAPSED=$((ELAPSED + POLL_INTERVAL))
+            echo "Still waiting... ${ELAPSED}s/${TIMEOUT_SECONDS}s"
+
+            echo "Current deployment status:"
+            kubectl get deployment/${{ env.DEPLOYMENT_NAME }} \
+              --namespace=${{ env.NAMESPACE }} \
+              -o wide || true
+
+            echo "Current pod status:"
+            kubectl get pods -n ${{ env.NAMESPACE }} -l app=hrs-gateway -o wide || true
+          done
+
+          echo "❌ Deployment rollout timed out after ${TIMEOUT_SECONDS}s"
+          echo "Collecting diagnostics..."
+
+          kubectl describe deployment/${{ env.DEPLOYMENT_NAME }} \
+            --namespace=${{ env.NAMESPACE }} || true
+
+          echo "Recent namespace events:"
+          kubectl get events \
             --namespace=${{ env.NAMESPACE }} \
-            --timeout=600s
+            --sort-by=.metadata.creationTimestamp | tail -n 40 || true
+
+          exit 1
 
       - name: Force restart deployment
         run: |
