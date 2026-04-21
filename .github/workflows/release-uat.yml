@@ -315,13 +315,13 @@ jobs:
           echo "Rollback completed. Current deployment status:"
           kubectl get deployment ${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }}
 
-  Integration-Tests:
-    name: Integration-Tests
+  Availability-Tests:
+    name: Availability Tests
     runs-on: ubuntu-latest
     needs: deploy-to-aks
     environment: ${{ github.event.inputs.environment }}
     steps:
-      - name: Run gateway integration tests
+      - name: Run gateway availability tests
         env:
           BASE_URL: ${{ secrets.UAT_API_ENDPOINT }}
           FRONTEND_ORIGIN: ${{ secrets.CORS_ORIGIN_UAT }}
@@ -342,15 +342,15 @@ jobs:
           echo "Checking reverse-proxy route to email service"
           curl -sSf "$BASE_URL/health/email" >/dev/null
 
-          echo "Gateway integration tests passed"
+          echo "Gateway availability tests passed"
 
-      - name: Post integration summary
+      - name: Post availability summary
         if: always()
         env:
           GATEWAY_ENDPOINT: ${{ secrets.UAT_API_ENDPOINT }}
           FRONTEND_ORIGIN: ${{ secrets.CORS_ORIGIN_UAT  }}
         run: |
-          echo "## 🧪 Gateway Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🧪 Gateway Availability Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -360,7 +360,105 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ job.status }}" == "success" ]; then
-            echo "### ✅ Status: Integration Tests Passed" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ Status: Availability Tests Passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "### ❌ Status: Integration Tests Failed" >> $GITHUB_STEP_SUMMARY
+            echo "### ❌ Status: Availability Tests Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  dast:
+    name: DAST Security Scan
+    runs-on: ubuntu-latest
+    needs: deploy-to-aks
+    environment: ${{ github.event.inputs.environment }}
+    env:
+      DAST_HOST_PORT: "5000"
+      DAST_CONTAINER_PORT: "8080"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Azure
+        uses: azure/login@92a5484dfaf04ca78a945966f6f5fe3f403e099b
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Pull and run Docker image
+        env:
+          IMAGE_TAG: ${{ github.event.inputs.version }}
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
+          ACR_NAME: ${{ secrets.ACR_NAME }}
+        run: |
+          az acr login --name "$ACR_NAME"
+
+          echo "Image tag from release input: ${IMAGE_TAG}"
+
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "ERROR: IMAGE_TAG is empty!"
+            echo "Using 'latest' as fallback"
+            IMAGE_TAG="latest"
+          fi
+
+          echo "Pulling image: ${ACR_NAME}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
+          docker pull "${ACR_NAME}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
+
+          echo "Starting container..."
+          docker run -d -p ${DAST_HOST_PORT}:${DAST_CONTAINER_PORT} --name hrs-gateway \
+            -e Auth0__Domain="$AUTH0_DOMAIN" \
+            -e Auth0__Audience="$AUTH0_AUDIENCE" \
+            "${ACR_NAME}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
+
+          echo "Waiting for application to start..."
+          sleep 20
+
+          echo "Container status:"
+          docker ps -a
+
+          echo "Container logs:"
+          docker logs hrs-gateway
+
+          echo "Testing health endpoint:"
+          curl -f http://localhost:${DAST_HOST_PORT}/health || echo "Health endpoint not available"
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@99b9334bed0a0ff8d797764e76c9ecae53168436 # v0.10.0
+        with:
+          target: "http://localhost:${{ env.DAST_HOST_PORT }}"
+          rules_file_name: ".zap/rules.tsv"
+          cmd_options: "-a -j -l WARN -T 10 -I -config globalexcludeurl.url_list.url(0)=https://firefox-settings-attachments.cdn.mozilla.net.*"
+
+      - name: Upload DAST scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dast-scan-results
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
+            report_xml.xml
+          retention-days: 7
+
+      - name: Cleanup DAST container
+        if: always()
+        run: docker rm -f hrs-gateway || true
+
+      - name: Post DAST summary
+        if: always()
+        run: |
+          echo "## 🛡️ DAST Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ github.event.inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Scanned Image Tag** | \`${{ github.event.inputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Scanner** | OWASP ZAP Baseline |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "### ✅ Status: DAST Scan Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Status: DAST Scan Failed" >> $GITHUB_STEP_SUMMARY
           fi
