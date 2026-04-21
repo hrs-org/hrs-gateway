@@ -380,7 +380,7 @@ jobs:
           fetch-depth: 0
 
       - name: Log in to Azure
-        uses: azure/login@v1
+        uses: azure/login@92a5484dfaf04ca78a945966f6f5fe3f403e099b
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
@@ -389,8 +389,9 @@ jobs:
           IMAGE_TAG: ${{ github.event.inputs.version }}
           AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
           AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
+          ACR_NAME: ${{ secrets.ACR_NAME }}
         run: |
-          az acr login --name ${{ secrets.ACR_NAME }}
+          az acr login --name "$ACR_NAME"
 
           echo "Image tag from release input: ${IMAGE_TAG}"
 
@@ -400,14 +401,14 @@ jobs:
             IMAGE_TAG="latest"
           fi
 
-          echo "Pulling image: ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
-          docker pull ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}
+          echo "Pulling image: ${ACR_NAME}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
+          docker pull "${ACR_NAME}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
 
           echo "Starting container..."
           docker run -d -p ${DAST_HOST_PORT}:${DAST_CONTAINER_PORT} --name hrs-gateway \
             -e Auth0__Domain="$AUTH0_DOMAIN" \
             -e Auth0__Audience="$AUTH0_AUDIENCE" \
-            ${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}
+            "${ACR_NAME}.azurecr.io/hrs-gateway-uat:${IMAGE_TAG}"
 
           echo "Waiting for application to start..."
           sleep 20
