@@ -119,6 +119,68 @@ jobs:
             exit 1
           fi
 
+      - name: Install Trivy
+        run: |
+          echo "📦 Installing Trivy..."
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Trivy Image Scan
+        run: |
+          echo "🔍 Running Trivy security scan on image..."
+
+          # Login to ACR to pull image
+          az acr login --name ${{ secrets.ACR_NAME }}
+
+          IMAGE_URL="${{ secrets.ACR_NAME }}.azurecr.io/hrs-gateway-uat:${{ github.event.inputs.version }}"
+          echo "Scanning image: $IMAGE_URL"
+
+          # Run Trivy scan with JSON output
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --format json \
+            --output trivy-results.json \
+            "$IMAGE_URL"
+
+          # Run Trivy scan with table output for logs
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --format table \
+            "$IMAGE_URL"
+
+          # Check for CRITICAL vulnerabilities
+          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json)
+          HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-results.json)
+
+          echo ""
+          echo "📊 Scan Summary:"
+          echo "  - CRITICAL: $CRITICAL_COUNT"
+          echo "  - HIGH: $HIGH_COUNT"
+
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo ""
+            echo "❌ Found $CRITICAL_COUNT CRITICAL vulnerability(ies) in the image"
+            echo "🚫 Blocking deployment due to CRITICAL vulnerabilities"
+            exit 1
+          else
+            echo ""
+            echo "✅ No CRITICAL vulnerabilities found"
+            if [ "$HIGH_COUNT" -gt 0 ]; then
+              echo "⚠️  Warning: $HIGH_COUNT HIGH severity vulnerabilities found (not blocking)"
+            fi
+          fi
+
+      - name: Upload Trivy scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-image-scan-results
+          path: trivy-results.json
+          retention-days: 30
+
       - name: Prepare deployment manifest
         run: |
           echo "Preparing deployment manifest with secrets..."
